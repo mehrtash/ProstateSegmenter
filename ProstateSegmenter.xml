@@ -10,20 +10,19 @@
   <acknowledgements><![CDATA[QIICR]]></acknowledgements>
   <parameters>
     <label>IO</label>
-    <description><![CDATA[Input/output parameters]]></description>
     <image type="label">
       <name>inputLabelName</name>
+      <longflag>inputLabel</longflag>
       <label>Input Label</label>
       <channel>input</channel>
-      <index>0</index>
-      <description><![CDATA[Input volume]]></description>
+      <description><![CDATA[Input label]]></description>
     </image>
     <image type="label">
       <name>outputLabelName</name>
+      <longflag>outputLabel</longflag>
       <label>Output Label</label>
       <channel>output</channel>
-      <index>1</index>
-      <description><![CDATA[Blurred Volume]]></description>
+      <description><![CDATA[Output label]]></description>
     </image>
   </parameters>
 </executable>

@@ -185,9 +185,7 @@ int main( int argc, char * argv[] )
   region.SetIndex(regionIndex);
 
   itk::ImageRegionIteratorWithIndex<LabelVolumeType> imageIterator(outputLabelVolume,outputLabelVolume->GetLargestPossibleRegion());
-  //itk::ImageRegionIteratorWithIndex<LabelVolumeType> imageIterator(outputLabelVolume,region);
   itk::ImageRegionIteratorWithIndex<LabelVolumeType> inputImageIterator(inputLabelVolume,inputLabelVolume->GetLargestPossibleRegion());
-  //itk::ImageRegionIteratorWithIndex<LabelVolumeType> imageIterator(outputLabelVolume,region);
 
   LabelVolumeType::PointType clps;
   itk::ContinuousIndex<double,3> centroidIndex;
