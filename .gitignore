@@ -4,6 +4,7 @@
 # Ignore all back-up files...
 *~
 *.bak
+*.autosave
 
 # except for .gitignore
 !.gitignore
