@@ -272,7 +272,7 @@ int main( int argc, char * argv[] )
         if(outputLabelName.size())
           {
           LabelVolumeWriterType::Pointer writer = LabelVolumeWriterType::New();
-          writer->SetInput(outputLabelVolumeResampled);
+          writer->SetInput(outputLabelVolume);
           writer->SetFileName(outputLabelName.c_str());
           writer->SetUseCompression(1);
           writer->Update();
