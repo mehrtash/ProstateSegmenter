@@ -9,7 +9,6 @@
   See the License for the specific language governing permissions and
   limitations under the License.
 ==============================================================================*/
-
 #include "itkPoint.h"
 #include "itkPointSet.h"
 #include "itkBoundingBox.h"
@@ -29,6 +28,32 @@
 namespace
 {
 
+  typedef itk::Matrix<double, 3, 3> MatrixType;
+
+void sortIndices(MatrixType & eigenVectors,int & index1, int& index2, int& index3 )
+{
+   double a = fabs(eigenVectors(2,0));
+   double b = fabs(eigenVectors(2,1));
+   double c = fabs(eigenVectors(2,2));
+   if (a>=b && a>=c)
+   {
+     index1 = 1;
+     index2 = 2;
+     index3 = 0;
+   }
+   else if (a<b && a>=c)
+   {
+     index1 = 0;
+     index2 = 2;
+     index3 = 1;
+   }
+   else
+   {
+     index1 = 0;
+     index2 = 1;
+     index3 = 2;
+   }
+}
 } // end of anonymous namespace
 
 int main( int argc, char * argv[] )
@@ -55,6 +80,8 @@ int main( int argc, char * argv[] )
                   double> NearestNeighborInterpolatorType;
       typename NearestNeighborInterpolatorType::Pointer 
       nearestNeighborInterpolator = NearestNeighborInterpolatorType::New();
+      LabelVolumeType::DirectionType labelDirection = inputLabelVolume->GetDirection();
+      //std::cout<<"direction: "<<labelDirection<<std::endl;
     //--------------------------------------------------------------------------
     // Resampling
       typedef itk::ResampleImageFilter<LabelVolumeType,LabelVolumeType >
@@ -85,7 +112,7 @@ int main( int argc, char * argv[] )
       outputSize[2] = static_cast<SizeValueType>(inputSize[2] * inputSpacing[2] / outputSpacing[2] + .5);
 
       typename ResampleFilterType::Pointer resampler = ResampleFilterType::New();
-      itk::PluginFilterWatcher watcher(resampler, "Resample Volume",CLPProcessInformation);
+      //itk::PluginFilterWatcher watcher(resampler, "Resample Volume",CLPProcessInformation);
 
       resampler->SetInterpolator( nearestNeighborInterpolator);
       resampler->SetInput( inputLabelVolume );
@@ -109,8 +136,8 @@ int main( int argc, char * argv[] )
 
     LabelGeometryImageFilterType::LabelsType allLabels = labelGeometryImageFilter->GetLabels();
     LabelGeometryImageFilterType::LabelsType::iterator allLabelsIt;
-    std::cout << "Number of labels: " << labelGeometryImageFilter->GetNumberOfLabels() << std::endl;
-    std::cout << std::endl;
+    //std::cout << "Number of labels: " << labelGeometryImageFilter->GetNumberOfLabels() << std::endl;
+    //std::cout << std::endl;
 
     for( allLabelsIt = allLabels.begin()+1; allLabelsIt != allLabels.end(); allLabelsIt++ )
       {
@@ -121,30 +148,35 @@ int main( int argc, char * argv[] )
         // get centroid
         LabelVolumeType::PointType centroid =  labelGeometryImageFilter->GetCentroid(labelValue);
         // get major axis length
-        double majorAxisLength = labelGeometryImageFilter->GetMajorAxisLength(labelValue);
+        itk::FixedArray<double, 3> axesLength;
+        axesLength = labelGeometryImageFilter->GetAxesLength(labelValue);
+        //std::cout<<"axis length is: "<<axesLength<<std::endl;
         // get eigenvectors
         MatrixType eigenVectors = labelGeometryImageFilter->GetEigenvectors(labelValue);
+        std::vector<double> eigenValues(3);
+        eigenValues = labelGeometryImageFilter->GetEigenvalues(labelValue);
         itk::FixedArray<double, 6> boundingBox;
         boundingBox = labelGeometryImageFilter->GetBoundingBox(labelValue);
         //
-        std::cout << "\tCentroid: " << centroid << std::endl;
-        std::cout <<"\t major axis length: "<<majorAxisLength<<std::endl;
-        std::cout << "\tEigenvectors: " << eigenVectors<< std::endl;
-        std::cout << "\tBoundingBox: " << boundingBox<< std::endl;
+        int index1, index2, index3;
+        sortIndices(eigenVectors,index1,index2,index3);
+
+        double axisLength = axesLength[index3];
+        //std::cout << "\tBoundingBox: " << boundingBox<< std::endl;
 
         // calculate point 1
         LabelVolumeType::PointType point1;
-        point1[0] = centroid[0] + eigenVectors(0,2)*majorAxisLength/6;
-        point1[1] = centroid[1] + eigenVectors(1,2)*majorAxisLength/6;
-        point1[2] = centroid[2] + eigenVectors(2,2)*majorAxisLength/6;
-        std::cout << "\tPoint1: " << point1<< std::endl;
+        point1[0] = centroid[0] + eigenVectors(0,index3)*axisLength/6;
+        point1[1] = centroid[1] + eigenVectors(1,index3)*axisLength/6;
+        point1[2] = centroid[2] + eigenVectors(2,index3)*axisLength/6;
+        //std::cout << "\tPoint1: " << point1<< std::endl;
 
         // calculate point 2
         LabelVolumeType::PointType point2;
-        point2[0] = centroid[0] - eigenVectors(0,2)*majorAxisLength/6;
-        point2[1] = centroid[1] - eigenVectors(1,2)*majorAxisLength/6;
-        point2[2] = centroid[2] - eigenVectors(2,2)*majorAxisLength/6;
-        std::cout << "\tPoint2: " << point2<< std::endl;
+        point2[0] = centroid[0] - eigenVectors(0,index3)*axisLength/6;
+        point2[1] = centroid[1] - eigenVectors(1,index3)*axisLength/6;
+        point2[2] = centroid[2] - eigenVectors(2,index3)*axisLength/6;
+        //std::cout << "\tPoint2: " << point2<< std::endl;
 
         LabelVolumeType::Pointer outputLabelVolumeResampled= LabelVolumeType::New();
         outputLabelVolumeResampled->SetRegions(inputLabelVolumeResampled->GetLargestPossibleRegion());
@@ -175,17 +207,17 @@ int main( int argc, char * argv[] )
             if (inputImageIterator.Value() == labelValue)
             {
               index = imageIterator.GetIndex();
-              double d1 = eigenVectors(0,0) * centroid[0] + eigenVectors(1,0) * centroid[1] + eigenVectors(2,0)* centroid[2];
-              double val1 = eigenVectors(0,0) * index[0] + eigenVectors(1,0) * index[1] + eigenVectors(2,0) * index[2] - d1;
+              double d1 = eigenVectors(0,index1) * centroid[0] + eigenVectors(1,index1) * centroid[1] + eigenVectors(2,index1)* centroid[2];
+              double val1 = eigenVectors(0,index1) * index[0] + eigenVectors(1,index1) * index[1] + eigenVectors(2,index1) * index[2] - d1;
 
-              double d2 = eigenVectors(0,1) * centroid[0] + eigenVectors(1,1) * centroid[1] + eigenVectors(2,1)* centroid[2];
-              double val2 = eigenVectors(0,1) * index[0] + eigenVectors(1,1) * index[1] + eigenVectors(2,1) * index[2] - d2;
+              double d2 = eigenVectors(0,index2) * centroid[0] + eigenVectors(1,index2) * centroid[1] + eigenVectors(2,index2)* centroid[2];
+              double val2 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d2;
 
-              double d3 = eigenVectors(0,2) * point1[0] + eigenVectors(1,2) * point1[1] + eigenVectors(2,2)* point1[2];
-              double val3 = eigenVectors(0,2) * index[0] + eigenVectors(1,2) * index[1] + eigenVectors(2,2) * index[2] - d3;
+              double d3 = eigenVectors(0,index3) * point1[0] + eigenVectors(1,index3) * point1[1] + eigenVectors(2,index3)* point1[2];
+              double val3 = eigenVectors(0,index3) * index[0] + eigenVectors(1,index3) * index[1] + eigenVectors(2,index3) * index[2] - d3;
 
-              double d4 = eigenVectors(0,2) * point2[0] + eigenVectors(1,2) * point2[1] + eigenVectors(2,2)* point2[2];
-              double val4 = eigenVectors(0,2) * index[0] + eigenVectors(1,2) * index[1] + eigenVectors(2,2) * index[2] - d4;
+              double d4 = eigenVectors(0,index3) * point2[0] + eigenVectors(1,index3) * point2[1] + eigenVectors(2,index3)* point2[2];
+              double val4 = eigenVectors(0,index3) * index[0] + eigenVectors(1,index3) * index[1] + eigenVectors(2,index3) * index[2] - d4;
              //
               if (val1 >0 && val2>0 && val4<0)
               {
