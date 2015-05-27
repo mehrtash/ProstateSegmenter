@@ -30,29 +30,40 @@ namespace
 
   typedef itk::Matrix<double, 3, 3> MatrixType;
 
-void sortIndices(MatrixType & eigenVectors,int & index1, int& index2, int& index3 )
+void sortIndices(MatrixType & eigenVectors,MatrixType & labelDirection,int & index0, int& index1, int& index2 )
 {
-   double a = fabs(eigenVectors(2,0));
-   double b = fabs(eigenVectors(2,1));
-   double c = fabs(eigenVectors(2,2));
-   if (a>=b && a>=c)
+  // This functions orders the indices so that index2 corresponds to the eigen vector which is along the
+  // superior-inferior direction of prostate gland. This is the direction at which we want to cut into three
+  // sections
+  typedef itk::Vector<double, 3> VectorType;
+  // s is the Superior vector (The third row of the direction cosines matrix of the label).
+  VectorType s;
+  s[0] = labelDirection(2,0);
+  s[1] = labelDirection(2,1);
+  s[2] = labelDirection(2,2);
+  // eTranspose is the eigenvectors matrix transpose
+  MatrixType eTranspose(eigenVectors.GetTranspose());
+  // we calculate the angle cosines between the eigenvectors and the s vector
+  VectorType cosines(eTranspose*s);
+   if (fabs(cosines[0])>=fabs(cosines[1]) && fabs(cosines[0])>=fabs(cosines[2]))
    {
-     index1 = 1;
-     index2 = 2;
-     index3 = 0;
+     index0 = 1;
+     index1 = 2;
+     index2 = 0;
    }
-   else if (a<b && a>=c)
+   else if (fabs(cosines[0])<fabs(cosines[1]) && fabs(cosines[1])>=fabs(cosines[2]))
    {
-     index1 = 0;
-     index2 = 2;
-     index3 = 1;
+     index0 = 0;
+     index1 = 2;
+     index2 = 1;
    }
    else
    {
-     index1 = 0;
-     index2 = 1;
-     index3 = 2;
+     index0 = 0;
+     index1 = 1;
+     index2 = 2;
    }
+  std::cout<<"Superior index is: "<<index2<<std::endl;
 }
 } // end of anonymous namespace
 
@@ -81,7 +92,8 @@ int main( int argc, char * argv[] )
       typename NearestNeighborInterpolatorType::Pointer 
       nearestNeighborInterpolator = NearestNeighborInterpolatorType::New();
       LabelVolumeType::DirectionType labelDirection = inputLabelVolume->GetDirection();
-      //std::cout<<"direction: "<<labelDirection<<std::endl;
+      std::cout<<"direction matrix is: "<<std::endl;
+      std::cout<<labelDirection<<std::endl;
     //--------------------------------------------------------------------------
     // Resampling
       typedef itk::ResampleImageFilter<LabelVolumeType,LabelVolumeType >
@@ -153,29 +165,29 @@ int main( int argc, char * argv[] )
         //std::cout<<"axis length is: "<<axesLength<<std::endl;
         // get eigenvectors
         MatrixType eigenVectors = labelGeometryImageFilter->GetEigenvectors(labelValue);
-        std::vector<double> eigenValues(3);
-        eigenValues = labelGeometryImageFilter->GetEigenvalues(labelValue);
+        std::cout<<"eigenvectors are : "<<std::endl;
+        std::cout<<eigenVectors<<std::endl;
         itk::FixedArray<double, 6> boundingBox;
         boundingBox = labelGeometryImageFilter->GetBoundingBox(labelValue);
         //
-        int index1, index2, index3;
-        sortIndices(eigenVectors,index1,index2,index3);
+        int index0, index1, index2;
+        sortIndices(eigenVectors,labelDirection,index0,index1,index2);
 
-        double axisLength = axesLength[index3];
+        double axisLength = axesLength[index2];
         //std::cout << "\tBoundingBox: " << boundingBox<< std::endl;
 
         // calculate point 1
         LabelVolumeType::PointType point1;
-        point1[0] = centroid[0] + eigenVectors(0,index3)*axisLength/6;
-        point1[1] = centroid[1] + eigenVectors(1,index3)*axisLength/6;
-        point1[2] = centroid[2] + eigenVectors(2,index3)*axisLength/6;
+        point1[0] = centroid[0] + eigenVectors(0,index2)*axisLength/6;
+        point1[1] = centroid[1] + eigenVectors(1,index2)*axisLength/6;
+        point1[2] = centroid[2] + eigenVectors(2,index2)*axisLength/6;
         //std::cout << "\tPoint1: " << point1<< std::endl;
 
         // calculate point 2
         LabelVolumeType::PointType point2;
-        point2[0] = centroid[0] - eigenVectors(0,index3)*axisLength/6;
-        point2[1] = centroid[1] - eigenVectors(1,index3)*axisLength/6;
-        point2[2] = centroid[2] - eigenVectors(2,index3)*axisLength/6;
+        point2[0] = centroid[0] - eigenVectors(0,index2)*axisLength/6;
+        point2[1] = centroid[1] - eigenVectors(1,index2)*axisLength/6;
+        point2[2] = centroid[2] - eigenVectors(2,index2)*axisLength/6;
         //std::cout << "\tPoint2: " << point2<< std::endl;
 
         LabelVolumeType::Pointer outputLabelVolumeResampled= LabelVolumeType::New();
@@ -207,17 +219,17 @@ int main( int argc, char * argv[] )
             if (inputImageIterator.Value() == labelValue)
             {
               index = imageIterator.GetIndex();
-              double d1 = eigenVectors(0,index1) * centroid[0] + eigenVectors(1,index1) * centroid[1] + eigenVectors(2,index1)* centroid[2];
-              double val1 = eigenVectors(0,index1) * index[0] + eigenVectors(1,index1) * index[1] + eigenVectors(2,index1) * index[2] - d1;
+              double d1 = eigenVectors(0,index0) * centroid[0] + eigenVectors(1,index0) * centroid[1] + eigenVectors(2,index0)* centroid[2];
+              double val1 = eigenVectors(0,index0) * index[0] + eigenVectors(1,index0) * index[1] + eigenVectors(2,index0) * index[2] - d1;
 
-              double d2 = eigenVectors(0,index2) * centroid[0] + eigenVectors(1,index2) * centroid[1] + eigenVectors(2,index2)* centroid[2];
-              double val2 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d2;
+              double d2 = eigenVectors(0,index1) * centroid[0] + eigenVectors(1,index1) * centroid[1] + eigenVectors(2,index1)* centroid[2];
+              double val2 = eigenVectors(0,index1) * index[0] + eigenVectors(1,index1) * index[1] + eigenVectors(2,index1) * index[2] - d2;
 
-              double d3 = eigenVectors(0,index3) * point1[0] + eigenVectors(1,index3) * point1[1] + eigenVectors(2,index3)* point1[2];
-              double val3 = eigenVectors(0,index3) * index[0] + eigenVectors(1,index3) * index[1] + eigenVectors(2,index3) * index[2] - d3;
+              double d3 = eigenVectors(0,index2) * point1[0] + eigenVectors(1,index2) * point1[1] + eigenVectors(2,index2)* point1[2];
+              double val3 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d3;
 
-              double d4 = eigenVectors(0,index3) * point2[0] + eigenVectors(1,index3) * point2[1] + eigenVectors(2,index3)* point2[2];
-              double val4 = eigenVectors(0,index3) * index[0] + eigenVectors(1,index3) * index[1] + eigenVectors(2,index3) * index[2] - d4;
+              double d4 = eigenVectors(0,index2) * point2[0] + eigenVectors(1,index2) * point2[1] + eigenVectors(2,index2)* point2[2];
+              double val4 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d4;
              //
               if (val1 >0 && val2>0 && val4<0)
               {
