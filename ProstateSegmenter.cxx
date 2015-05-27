@@ -30,12 +30,22 @@ namespace
 
   typedef itk::Matrix<double, 3, 3> MatrixType;
 
-void sortIndices(MatrixType & eigenVectors,MatrixType & labelDirection,int & index0, int& index1, int& index2 )
+void sortIndices(MatrixType & eigenVectors,MatrixType & labelDirection,int & rIndex, int& aIndex, int& sIndex)
 {
-  // This functions orders the indices so that index2 corresponds to the eigen vector which is along the
-  // superior-inferior direction of prostate gland. This is the direction at which we want to cut into three
-  // sections
+  // This functions finds eignenvector indices which are along the right-left (rIndex), anterior-posterior
+  // (aIndex) and superior-inferior (sIndex) directions of prostate gland.
+
   typedef itk::Vector<double, 3> VectorType;
+  // r is the Right vector (The first row of the direction cosines matrix of the label).
+  VectorType r;
+  r[0] = labelDirection(0,0);
+  r[1] = labelDirection(0,1);
+  r[2] = labelDirection(0,2);
+  // a is the Anterior vector (The second row of the direction cosines matrix of the label).
+  VectorType a;
+  a[0] = labelDirection(1,0);
+  a[1] = labelDirection(1,1);
+  a[2] = labelDirection(1,2);
   // s is the Superior vector (The third row of the direction cosines matrix of the label).
   VectorType s;
   s[0] = labelDirection(2,0);
@@ -43,27 +53,24 @@ void sortIndices(MatrixType & eigenVectors,MatrixType & labelDirection,int & ind
   s[2] = labelDirection(2,2);
   // eTranspose is the eigenvectors matrix transpose
   MatrixType eTranspose(eigenVectors.GetTranspose());
-  // we calculate the angle cosines between the eigenvectors and the s vector
-  VectorType cosines(eTranspose*s);
-   if (fabs(cosines[0])>=fabs(cosines[1]) && fabs(cosines[0])>=fabs(cosines[2]))
-   {
-     index0 = 1;
-     index1 = 2;
-     index2 = 0;
-   }
-   else if (fabs(cosines[0])<fabs(cosines[1]) && fabs(cosines[1])>=fabs(cosines[2]))
-   {
-     index0 = 0;
-     index1 = 2;
-     index2 = 1;
-   }
-   else
-   {
-     index0 = 0;
-     index1 = 1;
-     index2 = 2;
-   }
-  std::cout<<"Superior index is: "<<index2<<std::endl;
+  // we calculate the angle cosines between the eigenvectors and the r, a and s vectors
+  VectorType rCosines(eTranspose*r);
+  VectorType aCosines(eTranspose*a);
+  VectorType sCosines(eTranspose*s);
+  // find the maximum indices of the cosines and assign to rIndex, aIndex and sIndex
+  double R[3] = {fabs(rCosines[0]), fabs(rCosines[1]), fabs(rCosines[2])};
+  rIndex = std::distance(R, std::max_element(R, R+ 3));
+  double A[3] = {fabs(aCosines[0]), fabs(aCosines[1]), fabs(aCosines[2])};
+  aIndex = std::distance(A, std::max_element(A, A+ 3));
+  double S[3] = {fabs(sCosines[0]), fabs(sCosines[1]), fabs(sCosines[2])};
+  sIndex = std::distance(S, std::max_element(S, S+ 3));
+  //
+  std::cout<<"Right index is: "<<rIndex<<std::endl;
+  std::cout<<"Anterior index is: "<<aIndex<<std::endl;
+  std::cout<<"Superior index is: "<<sIndex<<std::endl;
+}
+int smallest(int x, int y, int z){
+    return std::min(std::min(x, y), z);
 }
 } // end of anonymous namespace
 
@@ -170,24 +177,24 @@ int main( int argc, char * argv[] )
         itk::FixedArray<double, 6> boundingBox;
         boundingBox = labelGeometryImageFilter->GetBoundingBox(labelValue);
         //
-        int index0, index1, index2;
-        sortIndices(eigenVectors,labelDirection,index0,index1,index2);
+        int rIndex, aIndex, sIndex;
+        sortIndices(eigenVectors,labelDirection,rIndex,aIndex,sIndex);
 
-        double axisLength = axesLength[index2];
+        double axisLength = axesLength[sIndex];
         //std::cout << "\tBoundingBox: " << boundingBox<< std::endl;
 
         // calculate point 1
         LabelVolumeType::PointType point1;
-        point1[0] = centroid[0] + eigenVectors(0,index2)*axisLength/6;
-        point1[1] = centroid[1] + eigenVectors(1,index2)*axisLength/6;
-        point1[2] = centroid[2] + eigenVectors(2,index2)*axisLength/6;
+        point1[0] = centroid[0] + eigenVectors(0,sIndex)*axisLength/6;
+        point1[1] = centroid[1] + eigenVectors(1,sIndex)*axisLength/6;
+        point1[2] = centroid[2] + eigenVectors(2,sIndex)*axisLength/6;
         //std::cout << "\tPoint1: " << point1<< std::endl;
 
         // calculate point 2
         LabelVolumeType::PointType point2;
-        point2[0] = centroid[0] - eigenVectors(0,index2)*axisLength/6;
-        point2[1] = centroid[1] - eigenVectors(1,index2)*axisLength/6;
-        point2[2] = centroid[2] - eigenVectors(2,index2)*axisLength/6;
+        point2[0] = centroid[0] - eigenVectors(0,sIndex)*axisLength/6;
+        point2[1] = centroid[1] - eigenVectors(1,sIndex)*axisLength/6;
+        point2[2] = centroid[2] - eigenVectors(2,sIndex)*axisLength/6;
         //std::cout << "\tPoint2: " << point2<< std::endl;
 
         LabelVolumeType::Pointer outputLabelVolumeResampled= LabelVolumeType::New();
@@ -219,69 +226,77 @@ int main( int argc, char * argv[] )
             if (inputImageIterator.Value() == labelValue)
             {
               index = imageIterator.GetIndex();
-              double d1 = eigenVectors(0,index0) * centroid[0] + eigenVectors(1,index0) * centroid[1] + eigenVectors(2,index0)* centroid[2];
-              double val1 = eigenVectors(0,index0) * index[0] + eigenVectors(1,index0) * index[1] + eigenVectors(2,index0) * index[2] - d1;
+              double d1 = eigenVectors(0,rIndex) * centroid[0] + eigenVectors(1,rIndex) * centroid[1] + eigenVectors(2,rIndex)* centroid[2];
+              double val1 = eigenVectors(0,rIndex) * index[0] + eigenVectors(1,rIndex) * index[1] + eigenVectors(2,rIndex) * index[2] - d1;
 
-              double d2 = eigenVectors(0,index1) * centroid[0] + eigenVectors(1,index1) * centroid[1] + eigenVectors(2,index1)* centroid[2];
-              double val2 = eigenVectors(0,index1) * index[0] + eigenVectors(1,index1) * index[1] + eigenVectors(2,index1) * index[2] - d2;
+              double d2 = eigenVectors(0,aIndex) * centroid[0] + eigenVectors(1,aIndex) * centroid[1] + eigenVectors(2,aIndex)* centroid[2];
+              double val2 = eigenVectors(0,aIndex) * index[0] + eigenVectors(1,aIndex) * index[1] + eigenVectors(2,aIndex) * index[2] - d2;
 
-              double d3 = eigenVectors(0,index2) * point1[0] + eigenVectors(1,index2) * point1[1] + eigenVectors(2,index2)* point1[2];
-              double val3 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d3;
+              double d3 = eigenVectors(0,sIndex) * point1[0] + eigenVectors(1,sIndex) * point1[1] + eigenVectors(2,sIndex)* point1[2];
+              double val3 = eigenVectors(0,sIndex) * index[0] + eigenVectors(1,sIndex) * index[1] + eigenVectors(2,sIndex) * index[2] - d3;
 
-              double d4 = eigenVectors(0,index2) * point2[0] + eigenVectors(1,index2) * point2[1] + eigenVectors(2,index2)* point2[2];
-              double val4 = eigenVectors(0,index2) * index[0] + eigenVectors(1,index2) * index[1] + eigenVectors(2,index2) * index[2] - d4;
-             //
-              if (val1 >0 && val2>0 && val4<0)
+              double d4 = eigenVectors(0,sIndex) * point2[0] + eigenVectors(1,sIndex) * point2[1] + eigenVectors(2,sIndex)* point2[2];
+              double val4 = eigenVectors(0,sIndex) * index[0] + eigenVectors(1,sIndex) * index[1] + eigenVectors(2,sIndex) * index[2] - d4;
+             // label 14 Left Anterior Base
+              if (val1 <0 && val2<0 && val4<0)
               {
-                  imageIterator.Set(1);
-              }
-
-              else if (val1 >0 && val2<0 && val4<0)
-              {
-                  imageIterator.Set(2);
-              }
-              else if (val1 <0 && val2>0 && val4<0)
-              {
-                  imageIterator.Set(3);
-              }
-              else if (val1 <0 && val2<0 && val4<0)
-              {
-                  imageIterator.Set(4);
-              }
-               //
-              else if (val1 >0 && val2>0 && val3<0 && val4>0)
-              {
-                  imageIterator.Set(5);
+                  imageIterator.Set(14);
               }
 
-              else if (val1 >0 && val2<0 && val3<0 && val4>0)
-              {
-                  imageIterator.Set(6);
-              }
-              else if (val1 <0 && val2>0 && val3<0 && val4>0)
-              {
-                  imageIterator.Set(7);
-              }
+             // label 15 Left Anterior Middle
               else if (val1 <0 && val2<0 && val3<0 && val4>0)
               {
-                  imageIterator.Set(8);
+                  imageIterator.Set(15);
               }
-             //
-             else  if (val1 >0 && val2>0 && val3>0)
-              {
-                  imageIterator.Set(9);
-              }
-              else if (val1 >0 && val2<0 && val3>0)
-              {
-                  imageIterator.Set(10);
-              }
-              else if (val1 <0 && val2>0 && val3>0)
-              {
-                  imageIterator.Set(11);
-              }
+             // label 16 Left Anterior Apex
               else if (val1 <0 && val2<0 && val3>0)
               {
-                  imageIterator.Set(12);
+                  imageIterator.Set(16);
+              }
+             // label 17 Left Posterior Base
+              else if (val1 <0 && val2>0 && val4<0)
+              {
+                  imageIterator.Set(17);
+              }
+             // label 18 Left Posterior Middle
+              else if (val1 <0 && val2>0 && val3<0 && val4>0)
+              {
+                  imageIterator.Set(18);
+              }
+             // label 19 Left Posterior Apex
+              else if (val1 <0 && val2>0 && val3>0)
+              {
+                  imageIterator.Set(19);
+              }
+             // label 20 Right Anterior Base
+              else if (val1 >0 && val2<0 && val4<0)
+              {
+                  imageIterator.Set(20);
+              }
+             // label 21 Right Anterior Middle
+              else if (val1 >0 && val2<0 && val3<0 && val4>0)
+              {
+                  imageIterator.Set(21);
+              }
+             // label 22 Right Anterior Apex
+             else  if (val1 >0 && val2<0 && val3>0)
+              {
+                  imageIterator.Set(22);
+              }
+             // label 23 Right Posterior Base
+              else if (val1 >0 && val2>0 && val4<0)
+              {
+                  imageIterator.Set(23);
+              }
+             // label 24 Right Posterior Middle
+              else if (val1 >0 && val2>0 && val3<0 && val4>0)
+              {
+                  imageIterator.Set(24);
+              }
+             // label 25 Right Posterior Apex
+              else if (val1 >0 && val2>0 && val3>0)
+              {
+                  imageIterator.Set(25);
               }
             }
           ++imageIterator;
