@@ -19,7 +19,7 @@ Prostate Segmenter is a [3D Slicer](http://slicer.org/) command line (CLI) modul
 * right posterior apex sector (label value: 25)
 
 ## Usage
-It is assumed that the prostate gland label value is 1. 
+It is assumed that in input label the prostate gland label value is 1. 
 
 ## Acknowledgments
 This work is supported by the following National Institutes of Health grant:
